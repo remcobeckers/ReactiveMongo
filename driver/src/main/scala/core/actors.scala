@@ -96,11 +96,10 @@ case object Closed
 class MongoDBSystem(
     seeds: Seq[String],
     initialAuthenticates: Seq[Authenticate],
-    nbChannelsPerNode: Int,
-    channelFactory: ChannelFactory = new ChannelFactory()) extends Actor {
+    nbChannelsPerNode: Int) extends Actor {
   import MongoDBSystem._
 
-  private implicit val cFactory = channelFactory
+  private implicit val channelFactory = new ChannelFactory(context.system.settings.config)
 
   import scala.concurrent.duration._
 

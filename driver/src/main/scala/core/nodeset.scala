@@ -9,9 +9,13 @@ import reactivemongo.utils.LazyLogger
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
 import org.jboss.netty.buffer.HeapChannelBufferFactory
 import org.jboss.netty.channel.{ Channel, ChannelPipeline, Channels }
+import org.jboss.netty.handler.ssl._
 import reactivemongo.core.protocol._
 import reactivemongo.api.ReadPreference
 import reactivemongo.bson._
+import com.typesafe.config._
+import scala.concurrent.blocking
+import reactivemongo.core.ssl._
 
 package object utils {
   def updateFirst[A, M[T] <: Iterable[T]](coll: M[A])(ƒ: A => Option[A])(implicit cbf: CanBuildFrom[M[_], A, M[A]]): M[A] = {
@@ -299,8 +303,10 @@ class RoundRobiner[A, M[T] <: Iterable[T]](val subject: M[A], startAtIndex: Int 
   def copy(subject: M[A], startAtIndex: Int = iterator.nextIndex) = new RoundRobiner(subject, startAtIndex)
 }
 
-class ChannelFactory(bossExecutor: Executor = Executors.newCachedThreadPool, workerExecutor: Executor = Executors.newCachedThreadPool) {
+class ChannelFactory(config: Config, bossExecutor: Executor = Executors.newCachedThreadPool, workerExecutor: Executor = Executors.newCachedThreadPool) {
   private val logger = LazyLogger("reactivemongo.core.nodeset.ChannelFactory")
+  val enableSSL = config.getBoolean("enable-ssl")
+  val sslSettings: Option[SSLSettings] = if (enableSSL) Some(new SSLSettings(config.getConfig("ssl"))) else None
 
   def create(host: String = "localhost", port: Int = 27017, receiver: ActorRef) = {
     val channel = makeChannel(receiver)
@@ -319,7 +325,18 @@ class ChannelFactory(bossExecutor: Executor = Executors.newCachedThreadPool, wor
     map
   }
 
-  private def makePipeline(receiver: ActorRef): ChannelPipeline = Channels.pipeline(new RequestEncoder(), new ResponseFrameDecoder(), new ResponseDecoder(), new MongoHandler(receiver))
+  private def makePipeline(receiver: ActorRef): ChannelPipeline = {
+     val sslSettings: Option[SSLSettings] = if (enableSSL) Some(new SSLSettings(config.getConfig("ssl"))) else None
+     val pipeline = Channels.pipeline(new RequestEncoder(), new ResponseFrameDecoder(), new ResponseDecoder(), new MongoHandler(receiver))
+     if(enableSSL) pipeline.addFirst("SslHandler", sslHandler())
+     pipeline
+  }
+
+  private def sslHandler() = {
+    val handler = NettySSLSupport(sslSettings.get, logger)
+    handler.setCloseOnSSLException(true)
+    handler
+  }
 
   private def makeChannel(receiver: ActorRef): Channel = {
     val channel = channelFactory.newChannel(makePipeline(receiver))

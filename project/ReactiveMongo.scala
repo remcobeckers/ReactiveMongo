@@ -125,6 +125,8 @@ object Dependencies {
 
   val iteratees = "com.typesafe.play" %% "play-iteratees" % "2.2.0"
 
+  val uncommonsMath = "org.uncommons.maths" % "uncommons-maths" % "1.2.2a" exclude("jfree", "jcommon") exclude("jfree", "jfreechart")
+
   val specs = "org.specs2" %% "specs2" % "2.2.1" % "test"
 
   val log4jVersion = "2.0-beta9"
@@ -154,6 +156,7 @@ object ReactiveMongoBuild extends Build {
         netty,
         akkaActor,
         iteratees,
+        uncommonsMath,
         specs) ++ log4j))) dependsOn (bsonmacros)
 
   lazy val bson = Project(
