@@ -85,6 +85,8 @@ case object SetUnavailable
 case object RegisterMonitor
 /** MongoDBSystem has been shut down. */
 case object Closed
+/** MongoDBSystem sends this message to itself to release the ChannelFactory, to prevent doing this from the I/O thread. */
+case object ReleaseChannelFactory
 
 /**
  * Main actor that processes the requests.
@@ -104,6 +106,8 @@ class MongoDBSystem(
   import scala.concurrent.duration._
 
   val requestIds = new RequestIds
+
+  var isClosing = false
 
   private val awaitingResponses = scala.collection.mutable.LinkedHashMap[Int, AwaitingResponse]()
 
@@ -161,6 +165,8 @@ class MongoDBSystem(
     })
 
   val closing: Receive = {
+    case ReleaseChannelFactory => channelFactory.release
+
     case req: RequestMaker =>
       logger.error(s"Received a non-expecting response request during closing process: $req")
 
@@ -214,24 +220,23 @@ class MongoDBSystem(
   override def receive = {
     case RegisterMonitor => monitors += sender
 
+    case ReleaseChannelFactory => channelFactory.release
+
     case Close =>
       logger.info("Received Close message, going to close connections and moving on stage Closing")
-
+      isClosing = true
       // cancel all jobs
       connectAllJob.cancel
       refreshAllJob.cancel
 
       // close all connections
       val listener = new ChannelGroupFutureListener {
-        val factory = channelFactory
-        val monitorActors = monitors
         def operationComplete(future: ChannelGroupFuture): Unit = {
           logger.debug("Netty says all channels are closed.")
-          factory.channelFactory.releaseExternalResources
+          self ! ReleaseChannelFactory
         }
       }
       allChannelGroup(nodeSet).close.addListener(listener)
-
       // fail all requests waiting for a response
       awaitingResponses.foreach( _._2.promise.failure(Exceptions.ClosedException) )
       awaitingResponses.empty
@@ -508,28 +513,20 @@ class MongoDBSystem(
   }
 
   override def postStop() {
-    // COPY OF CLOSING CODE FROM LINE 218
+    if(!isClosing) {
+      // cancel all jobs
+      connectAllJob.cancel
+      refreshAllJob.cancel
 
-    // cancel all jobs
-    connectAllJob.cancel
-    refreshAllJob.cancel
+      allChannelGroup(nodeSet).close.awaitUninterruptibly
+      channelFactory.release
 
-    // close all connections
-    val listener = new ChannelGroupFutureListener {
-      val factory = channelFactory
-      val monitorActors = monitors
-      def operationComplete(future: ChannelGroupFuture): Unit = {
-        logger.debug("Netty says all channels are closed.")
-        factory.channelFactory.releaseExternalResources
-      }
+      // fail all requests waiting for a response
+      awaitingResponses.foreach( _._2.promise.failure(Exceptions.ClosedException) )
+      awaitingResponses.empty
+
+      logger.warn(s"MongoDBSystem $self stopped.")
     }
-    allChannelGroup(nodeSet).close.addListener(listener)
-
-    // fail all requests waiting for a response
-    awaitingResponses.foreach( _._2.promise.failure(Exceptions.ClosedException) )
-    awaitingResponses.empty
-
-    logger.warn(s"MongoDBSystem $self stopped.")
   }
 
   def broadcastMonitors(message: AnyRef) = monitors.foreach(_ ! message)
@@ -658,21 +655,6 @@ class MonitorActor(sys: ActorRef) extends Actor {
       logger.debug(s"Monitor $self closed, stopping...")
       waitingForClose.dequeueAll(_ => true).foreach(_ ! Closed)
       context.stop(self)
-  }
-
-  override def postStop {
-    // COPY OF CLOSING CODE FROM LINE 656
-    // I'm not sure this will actually be useful because the close message we send to sys
-    // will probably not be received if we are stopping because the Actorsystem is killed.
-    // I can't hurt though...
-    killed = true
-    sys ! Close
-    waitingForClose += sender
-    waitingForPrimary.dequeueAll(_ => true).foreach(_ ! Failure(new RuntimeException("MongoDBSystem actor shutting down or no longer active")))
-
-    // EXECUTE "CLOSED" CODE too?
-
-    logger.debug(s"Monitor $self stopped.")
   }
 }
 

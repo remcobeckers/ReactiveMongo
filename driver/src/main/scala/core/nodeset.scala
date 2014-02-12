@@ -314,7 +314,7 @@ class ChannelFactory(config: Config, bossExecutor: Executor = Executors.newCache
     channel
   }
 
-  val channelFactory = new NioClientSocketChannelFactory(bossExecutor, workerExecutor)
+  private val channelFactory = new NioClientSocketChannelFactory(bossExecutor, workerExecutor)
 
   private val bufferFactory = new HeapChannelBufferFactory(java.nio.ByteOrder.LITTLE_ENDIAN)
 
@@ -343,4 +343,6 @@ class ChannelFactory(config: Config, bossExecutor: Executor = Executors.newCache
     channel.getConfig.setOptions(makeOptions)
     channel
   }
+
+  def release = channelFactory.releaseExternalResources
 }
