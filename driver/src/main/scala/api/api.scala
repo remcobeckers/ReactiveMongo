@@ -305,7 +305,7 @@ class MongoDriver(systemOption: Option[ActorSystem] = None) {
   val system = systemOption.getOrElse(MongoDriver.defaultSystem)
 
   def close() = systemOption match {
-    // Non default actor system -- terminate actors used by MongoConnections 
+    // Non default actor system -- terminate actors used by MongoConnections
     case Some(_) =>
       connections.foreach { connection =>
         connection.monitor ! Close
@@ -375,7 +375,7 @@ object MongoDriver {
   private def defaultSystem = {
     import com.typesafe.config.ConfigFactory
     val config = ConfigFactory.load()
-    ActorSystem("reactivemongo", config.getConfig("mongo-async-driver"))
+    ActorSystem("reactivemongo", config)
   }
 
   /** Creates a new MongoDriver with a new ActorSystem. */

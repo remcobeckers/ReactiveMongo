@@ -305,8 +305,8 @@ class RoundRobiner[A, M[T] <: Iterable[T]](val subject: M[A], startAtIndex: Int 
 
 class ChannelFactory(config: Config, bossExecutor: Executor = Executors.newCachedThreadPool, workerExecutor: Executor = Executors.newCachedThreadPool) {
   private val logger = LazyLogger("reactivemongo.core.nodeset.ChannelFactory")
-  val enableSSL = config.getBoolean("enable-ssl")
-  val sslSettings: Option[SSLSettings] = if (enableSSL) Some(new SSLSettings(config.getConfig("ssl"))) else None
+  val enableSSL = config.getBoolean("mongo-async-driver.enable-ssl")
+  val sslSettings: Option[SSLSettings] = if (enableSSL) Some(new SSLSettings(config.getConfig("mongo-async-driver.ssl"))) else None
 
   def create(host: String = "localhost", port: Int = 27017, receiver: ActorRef) = {
     val channel = makeChannel(receiver)
@@ -326,7 +326,7 @@ class ChannelFactory(config: Config, bossExecutor: Executor = Executors.newCache
   }
 
   private def makePipeline(receiver: ActorRef): ChannelPipeline = {
-     val sslSettings: Option[SSLSettings] = if (enableSSL) Some(new SSLSettings(config.getConfig("ssl"))) else None
+     val sslSettings: Option[SSLSettings] = if (enableSSL) Some(new SSLSettings(config.getConfig("mongo-async-driver.ssl"))) else None
      val pipeline = Channels.pipeline(new RequestEncoder(), new ResponseFrameDecoder(), new ResponseDecoder(), new MongoHandler(receiver))
      if(enableSSL) pipeline.addFirst("SslHandler", sslHandler())
      pipeline
