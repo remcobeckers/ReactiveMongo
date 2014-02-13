@@ -52,7 +52,7 @@ private[core] class SSLSettings(config: Config) {
                                                     .map(_ => getConfig("trust-store"))
                                                     .map(c => TrustStoreSettings(c.getString("path"), c.getString("password")))
 
-  val SSLEnabledAlgorithms = immutableSeq(getStringList("enabled-algorithms")).to[Set]
+  val SSLEnabledAlgorithms = immutableSeq(getStringList("enabled-cipher-suites")).to[Set]
 
   val SSLProtocol = emptyIsNone(getString("protocol"))
 
@@ -142,7 +142,10 @@ private [core] object NettySSLSupport {
         val sslHandler = new SslHandler({
           val sslEngine = context.createSSLEngine
           sslEngine.setUseClientMode(true)
-          sslEngine.setEnabledCipherSuites(settings.SSLEnabledAlgorithms.toArray)
+          val enabledAlgorithms = settings.SSLEnabledAlgorithms.toArray
+          if(!enabledAlgorithms.isEmpty) {
+            sslEngine.setEnabledCipherSuites(enabledAlgorithms)
+          }
           sslEngine
         })
         sslHandler.setIssueHandshake(true)
