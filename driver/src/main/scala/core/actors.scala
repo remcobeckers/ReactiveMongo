@@ -100,14 +100,11 @@ class MongoDBSystem(
     initialAuthenticates: Seq[Authenticate],
     nbChannelsPerNode: Int) extends Actor {
   import MongoDBSystem._
-
   private implicit val channelFactory = new ChannelFactory(context.system.settings.config)
 
   import scala.concurrent.duration._
 
   val requestIds = new RequestIds
-
-  var isClosing = false
 
   private val awaitingResponses = scala.collection.mutable.LinkedHashMap[Int, AwaitingResponse]()
 
@@ -196,6 +193,7 @@ class MongoDBSystem(
         logger.debug(s"(State: Closing) Received $msg, remainingConnections = $remainingConnections, disconnected = $disconnected, connected = ${remainingConnections - disconnected}")
       }
       if(remainingConnections == 0) {
+        channelFactory.release
         monitors foreach (_ ! Closed)
         logger.info(s"MongoDBSystem $self is stopping.")
         context.stop(self)
@@ -220,11 +218,8 @@ class MongoDBSystem(
   override def receive = {
     case RegisterMonitor => monitors += sender
 
-    case ReleaseChannelFactory => channelFactory.release
-
     case Close =>
       logger.info("Received Close message, going to close connections and moving on stage Closing")
-      isClosing = true
       // cancel all jobs
       connectAllJob.cancel
       refreshAllJob.cancel
@@ -233,6 +228,8 @@ class MongoDBSystem(
       val listener = new ChannelGroupFutureListener {
         def operationComplete(future: ChannelGroupFuture): Unit = {
           logger.debug("Netty says all channels are closed.")
+          // sending ReleaseChannelFactory to self, just in case
+          // some channels could not be closed and remainingConnections never gets to zero.
           self ! ReleaseChannelFactory
         }
       }
@@ -513,7 +510,10 @@ class MongoDBSystem(
   }
 
   override def postStop() {
-    if(!isClosing) {
+    val remainingConnections = nodeSet.nodes.foldLeft(0) { (open, node) =>
+      open + node.connections.size
+    }
+    if(remainingConnections != 0) {
       // cancel all jobs
       connectAllJob.cancel
       refreshAllJob.cancel
@@ -524,8 +524,6 @@ class MongoDBSystem(
       // fail all requests waiting for a response
       awaitingResponses.foreach( _._2.promise.failure(Exceptions.ClosedException) )
       awaitingResponses.empty
-
-      logger.warn(s"MongoDBSystem $self stopped.")
     }
   }
 
