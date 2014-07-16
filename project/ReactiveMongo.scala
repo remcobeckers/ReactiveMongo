@@ -2,7 +2,7 @@ import sbt._
 import sbt.Keys._
 
 object BuildSettings {
-  val buildVersion = "0.10.0-fixes-ssl-2.3.0"
+  val buildVersion = "0.10.0-fixes-ssl-2.3.4"
 
   val filter = { (ms: Seq[(File, String)]) =>
     ms filter {
@@ -15,7 +15,7 @@ object BuildSettings {
     organization := "org.reactivemongo",
     version := buildVersion,
     scalaVersion := "2.10.3",
-    crossScalaVersions := Seq("2.10.3"),
+    crossScalaVersions := Seq("2.10.3", "2.11.1"),
     crossVersion := CrossVersion.binary,
     javaOptions in test ++= Seq("-Xmx512m", "-XX:MaxPermSize=512m"),
     scalacOptions ++= Seq("-unchecked", "-deprecation"),
@@ -121,13 +121,13 @@ object Resolvers {
 object Dependencies {
   val netty = "io.netty" % "netty" % "3.6.5.Final" cross CrossVersion.Disabled
 
-  val akkaActor = "com.typesafe.akka" %% "akka-actor" % "2.3.0"
+  val akkaActor = "com.typesafe.akka" %% "akka-actor" % "2.3.4"
 
-  val iteratees = "com.typesafe.play" %% "play-iteratees" % "2.2.0"
+  val iteratees = "com.typesafe.play" %% "play-iteratees" % "2.3.1"
 
   val uncommonsMath = "org.uncommons.maths" % "uncommons-maths" % "1.2.2a" exclude("jfree", "jcommon") exclude("jfree", "jfreechart")
 
-  val specs = "org.specs2" %% "specs2" % "2.2.1" % "test"
+  val specs = "org.specs2" %% "specs2" % "2.3.11" % "test"
 
   val log4jVersion = "2.0-beta9"
   val log4j = Seq("org.apache.logging.log4j" % "log4j-api" % log4jVersion, "org.apache.logging.log4j" % "log4j-core" % log4jVersion)
@@ -162,13 +162,16 @@ object ReactiveMongoBuild extends Build {
   lazy val bson = Project(
     "ReactiveMongo-BSON",
     file("bson"),
-    settings = buildSettings)
+    settings = buildSettings).
+    settings(libraryDependencies += Dependencies.specs)
 
   lazy val bsonmacros = Project(
     "ReactiveMongo-BSON-Macros",
     file("macros"),
     settings = buildSettings ++ Seq(
       libraryDependencies <+= (scalaVersion)("org.scala-lang" % "scala-compiler" % _)
-    )) dependsOn (bson)
+    )).
+    settings(libraryDependencies += Dependencies.specs).
+    dependsOn (bson)
 }
 

@@ -93,7 +93,7 @@ class IndexesSpec extends Specification with Tags {
         failure
       } catch {
         case e: DatabaseException =>
-          e.code mustEqual Some(16572) // MongoError['Can't extract geo keys from object, malformed geometry?' (code = 16572)]
+          e.code mustEqual Some(16755) // MongoError['Can't extract geo keys from object, malformed geometry?' (code = 16572)]
         case e =>
           e.printStackTrace()
           throw e
